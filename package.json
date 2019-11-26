@@ -1,0 +1,27 @@
+{
+  "name": "@isomorphic-git/server",
+  "version": "0.0.0",
+  "description": "git smart HTTP server built using isomorphic-git",
+  "main": "middleware.js",
+  "bin": {
+    "git-server": "http-daemon.js"
+  },
+  "scripts": {
+    "test": "echo \"No tests\""
+  },
+  "keywords": [],
+  "author": "William Hilton <wmhilton@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "basic-auth": "^2.0.0",
+    "buffer-equal-constant-time": "^1.0.1",
+    "chalk": "^2.4.1",
+    "daemonize-process": "^1.0.9",
+    "micro-cors": "^0.1.1",
+    "minimisted": "^2.0.0",
+    "tree-kill": "^1.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
