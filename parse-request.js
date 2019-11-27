@@ -5,12 +5,12 @@ function infoRefs (req, u) {
 
 function pull (req, u) {
   const gitdir = u.pathname.replace(/\/git-upload-pack$/, '').replace(/^\//, '')
-  return { gitdir }
+  return { gitdir, service: 'git-receive-pack' }
 }
 
 function push (req, u) {
   const gitdir = u.pathname.replace(/\/git-receive-pack$/, '').replace(/^\//, '')
-  return { gitdir }
+  return { gitdir, service: 'git-receive-pack' }
 }
 
 module.exports = {

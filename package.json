@@ -17,6 +17,7 @@
     "buffer-equal-constant-time": "^1.0.1",
     "chalk": "^2.4.1",
     "daemonize-process": "^1.0.9",
+    "figlet": "^1.2.4",
     "micro-cors": "^0.1.1",
     "minimisted": "^2.0.0",
     "tree-kill": "^1.2.0"
