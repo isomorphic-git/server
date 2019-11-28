@@ -51,7 +51,7 @@ function factory (config) {
     } else if (is.push(req, u)) {
       const { gitdir, service } = parse.push(req, u)
       req.pipe(process.stdout)
-      const { headers, response } = await serveReceivePack({ fs, gitdir, service })
+      const { headers, response } = await serveReceivePack({ fs, gitdir, service, banner: require('./logo.js') })
       for (const header in headers) {
         res.setHeader(header, headers[header])
       }
