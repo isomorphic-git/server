@@ -2,6 +2,7 @@ var fs = require('fs')
 var fp = require('fs').promises
 var path = require('path')
 var url = require('url')
+var { indexPack } = require('isomorphic-git')
 var { serveInfoRefs, serveReceivePack, parseReceivePackRequest } = require('isomorphic-git/dist/for-node/isomorphic-git/internal-apis.js')
 
 var chalk = require('chalk')
@@ -49,9 +50,28 @@ function factory (config) {
       res.statusCode = 500
       res.end('Unsupported operation\n')
     } else if (is.push(req, u)) {
-      const { gitdir, service } = parse.push(req, u)
-      // req.pipe(process.stdout)
-      let { capabilities, updates } = await parseReceivePackRequest(req)
+      let { gitdir, service } = parse.push(req, u)
+      let { capabilities, updates, packfile } = await parseReceivePackRequest(req)
+      const dir = await fp.mkdtemp(path.join(__dirname, 'quarantine', gitdir + '-'))
+      let filepath = 'pack-.pack'
+      const stream = fs.createWriteStream(path.join(dir, filepath))
+      let last20
+      for await (const buffer of packfile) {
+        if (buffer) {
+          last20 = buffer.slice(-20)
+          stream.write(buffer)
+        }
+      }
+      stream.end()
+      if (last20 && last20.length === 20) {
+        last20 = last20.toString('hex')
+        const oldfilepath = filepath
+        filepath = `pack-${last20}.pack`
+        await fp.rename(path.join(dir, oldfilepath), path.join(dir, filepath))
+      }
+      // index packfile
+      gitdir = path.join(__dirname, gitdir)
+      await indexPack({ fs, gitdir, dir, filepath })
       const { headers, response } = await serveReceivePack({ fs, gitdir, service, banner: require('./logo.js'), ok: updates.map(x => x.fullRef) })
       for (const header in headers) {
         res.setHeader(header, headers[header])
