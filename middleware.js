@@ -2,8 +2,12 @@ var fs = require('fs')
 var fp = require('fs').promises
 var path = require('path')
 var url = require('url')
-var { indexPack } = require('isomorphic-git')
+var EventEmitter = require('events').EventEmitter
+var { indexPack, plugins } = require('isomorphic-git')
 var { serveInfoRefs, serveReceivePack, parseReceivePackRequest } = require('isomorphic-git/dist/for-node/isomorphic-git/internal-apis.js')
+
+let ee = new EventEmitter()
+plugins.set('emitter', ee)
 
 var chalk = require('chalk')
 var is = require('./identify-request.js')
@@ -51,36 +55,82 @@ function factory (config) {
       res.end('Unsupported operation\n')
     } else if (is.push(req, u)) {
       let { gitdir, service } = parse.push(req, u)
-      let { capabilities, updates, packfile } = await parseReceivePackRequest(req)
-      const dir = await fp.mkdtemp(path.join(__dirname, 'quarantine', gitdir + '-'))
-      let filepath = 'pack-.pack'
-      const stream = fs.createWriteStream(path.join(dir, filepath))
-      let last20
-      for await (const buffer of packfile) {
-        if (buffer) {
-          last20 = buffer.slice(-20)
-          stream.write(buffer)
+      try {
+        let { capabilities, updates, packfile } = await parseReceivePackRequest(req)
+
+        // Save packfile to disk
+        const dir = await fp.mkdtemp(path.join(__dirname, 'quarantine', gitdir + '-'))
+        let filepath = 'pack-.pack'
+        const stream = fs.createWriteStream(path.join(dir, filepath))
+        let last20
+        for await (const buffer of packfile) {
+          if (buffer) {
+            last20 = buffer.slice(-20)
+            stream.write(buffer)
+          }
+        }
+        stream.end()
+        if (last20 && last20.length === 20) {
+          last20 = last20.toString('hex')
+          const oldfilepath = filepath
+          filepath = `pack-${last20}.pack`
+          await fp.rename(path.join(dir, oldfilepath), path.join(dir, filepath))
+        }
+        gitdir = path.join(__dirname, gitdir)
+
+        // send HTTP response headers
+        const { headers } = await serveReceivePack({ type: 'service', service })
+        for (const header in headers) {
+          res.setHeader(header, headers[header])
+        }
+        res.statusCode = 200
+
+        // index packfile
+        res.write(await serveReceivePack({ type: 'print', message: 'Indexing packfile...' }))
+        let currentPhase = null
+        const listener = async ({ phase, loaded, total, lengthComputable }) => {
+          let np = phase !== currentPhase ? '\n' : '\r'
+          currentPhase = phase
+          res.write(await serveReceivePack({ type: 'print', message: `${np}${phase} ${loaded}/${total}` }))
+        }
+        let problem = false
+        try {
+          ee.on(`${last20}:progress`, listener)
+          await indexPack({ fs, gitdir, dir, filepath, emitterPrefix: `${last20}:` })
+          res.write(await serveReceivePack({ type: 'print', message: '\nIndexing a success!' }))
+          res.write(await serveReceivePack({ type: 'unpack', unpack: 'ok' }))
+        } catch (e) {
+          problem = true
+          res.write(await serveReceivePack({ type: 'print', message: '\nOh dear!' }))
+          res.write(await serveReceivePack({ type: 'unpack', unpack: e.message }))
+        } finally {
+          ee.removeListener(`${last20}:progress`, listener)
+        }
+
+        // refs
+        for (const update of updates) {
+          if (!problem) {
+            res.write(await serveReceivePack({ type: 'ok', ref: update.fullRef }))
+          } else {
+            res.write(await serveReceivePack({ type: 'ng', ref: update.fullRef, message: 'Could not index pack' }))
+          }
+        }
+
+        // gratuitous banner
+        res.write(await serveReceivePack({ type: 'print', message: '\n' + require('./logo.js') }))
+
+        // fin
+        res.write(await serveReceivePack({ type: 'fin' }))
+        res.end('')
+      } catch (e) {
+        if (e.message === 'Client is done') {
+          res.statusCode = 200
+          res.end('')
+        } else {
+          res.statusCode = 500
+          res.end('')
         }
       }
-      stream.end()
-      if (last20 && last20.length === 20) {
-        last20 = last20.toString('hex')
-        const oldfilepath = filepath
-        filepath = `pack-${last20}.pack`
-        await fp.rename(path.join(dir, oldfilepath), path.join(dir, filepath))
-      }
-      // index packfile
-      gitdir = path.join(__dirname, gitdir)
-      await indexPack({ fs, gitdir, dir, filepath })
-      const { headers, response } = await serveReceivePack({ fs, gitdir, service, banner: require('./logo.js'), ok: updates.map(x => x.fullRef) })
-      for (const header in headers) {
-        res.setHeader(header, headers[header])
-      }
-      res.statusCode = 200
-      for (const buffer of response) {
-        res.write(buffer)
-      }
-      res.end('')
     }
     log(req, res)
   }
