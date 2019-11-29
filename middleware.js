@@ -2,7 +2,7 @@ var fs = require('fs')
 var fp = require('fs').promises
 var path = require('path')
 var url = require('url')
-var { serveInfoRefs, serveReceivePack } = require('isomorphic-git/dist/for-node/isomorphic-git/internal-apis.js')
+var { serveInfoRefs, serveReceivePack, parseReceivePackRequest } = require('isomorphic-git/dist/for-node/isomorphic-git/internal-apis.js')
 
 var chalk = require('chalk')
 var is = require('./identify-request.js')
@@ -50,8 +50,9 @@ function factory (config) {
       res.end('Unsupported operation\n')
     } else if (is.push(req, u)) {
       const { gitdir, service } = parse.push(req, u)
-      req.pipe(process.stdout)
-      const { headers, response } = await serveReceivePack({ fs, gitdir, service, banner: require('./logo.js') })
+      // req.pipe(process.stdout)
+      let { capabilities, updates } = await parseReceivePackRequest(req)
+      const { headers, response } = await serveReceivePack({ fs, gitdir, service, banner: require('./logo.js'), ok: updates.map(x => x.fullRef) })
       for (const header in headers) {
         res.setHeader(header, headers[header])
       }
