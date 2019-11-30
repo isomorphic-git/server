@@ -9,22 +9,25 @@ module.exports = (username) =>
     return json.map(data => data.raw_key)
   })
 
-async function username2keys(username) {
-  return new Promise((resolve, reject) => {
-    get.concat({
-      url: `https://api.github.com/users/${username}/gpg_keys`,
-      json: true,
-      headers: {
-        'user-agent': 'GitHub PGP KeyFinder'
-      }
-    }, (err, res, data) => {
-      if (err) return reject(err)
-      return resolve(data.map(i => i.raw_key))
-    })
-  })
+async function usernames2keys(usernames) {
+  const all = await Promise.all(
+    usernames.map(username => new Promise((resolve, reject) => {
+      get.concat({
+        url: `https://api.github.com/users/${username}/gpg_keys`,
+        json: true,
+        headers: {
+          'user-agent': 'GitHub PGP KeyFinder'
+        }
+      }, (err, res, data) => {
+        if (err) return reject(err)
+        return resolve(data.map(i => i.raw_key))
+      })
+    }))
+  )
+  return all.reduce((a, b) => a.concat(b)).filter(Boolean)
 }
 
-async function email2username(email) {
+async function email2usernames(email) {
   return new Promise((resolve, reject) => {
     get.concat({
       url: `https://api.github.com/search/users?q=${email}+in:email`,
@@ -35,11 +38,9 @@ async function email2username(email) {
     }, (err, res, data) => {
       if (err) return reject(err)
       if (data.total_count === 0) {
-        return reject(new Error(`No GitHub user publicly associated with ${email}`))
-      } else if (data.total_count > 1) {
-        return reject(new Error(`Multiple GitHub users found for ${email}: ${JSON.stringify(data.items.map(i => i.login))}`))
-      } else if (data.total_count === 1) {
-        return resolve(data.items[0].login)
+        return reject(new Error(`Could not find the GitHub user publicly associated with the email address "${email}"`))
+      } else if (data.total_count > 0) {
+        return resolve(data.items.map(i => i.login))
       } else {
         return reject('Unexpected value for data.total_count returned by GitHub API')
       }
@@ -49,8 +50,8 @@ async function email2username(email) {
 
 async function lookup(email) {
   if (cache[email]) return cache[email]
-  const username = await email2username(email)
-  const keys = await username2keys(username)
+  const usernames = await email2usernames(email)
+  const keys = await usernames2keys(usernames)
   cache[email] = keys
   return cache[email]
 }
