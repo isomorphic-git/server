@@ -3,7 +3,7 @@ const fp = require('fs').promises
 const path = require('path')
 const url = require('url')
 const EventEmitter = require('events').EventEmitter
-const { E, indexPack, plugins, readObject, verify, serveInfoRefs, serveReceivePack, parseReceivePackRequest } = require('isomorphic-git')
+const { E, indexPack, plugins, readObject, resolveRef, serveInfoRefs, serveReceivePack, parseReceivePackRequest } = require('isomorphic-git')
 const { pgp } = require('@isomorphic-git/pgp-plugin')
 
 let ee = new EventEmitter()
@@ -29,9 +29,15 @@ const sleep = ms => new Promise(cb => setTimeout(cb, ms))
 
 const tick = () => new Promise(cb => process.nextTick(cb))
 
-function log(req, res) {
+function logIncoming(req, res) {
   const color = res.statusCode > 399 ? chalk.red : chalk.green
-  console.log(color(`[git-server] ${res.statusCode} ${pad(req.method)} ${req.url}`))
+  console.log(`    ${pad(req.method)} ${req.url}`)
+  return false
+}
+
+function logOutgoing(req, res) {
+  const color = res.statusCode > 399 ? chalk.red : chalk.green
+  console.log(color(`${res.statusCode} ${pad(req.method)} ${req.url}`))
   return false
 }
 
@@ -39,6 +45,8 @@ function factory (config) {
   return async function middleware (req, res, next) {
     const u = url.parse(req.url, true)
     if (!next) next = () => void(0)
+
+    logIncoming(req, res)
 
     if (is.preflightInfoRefs(req, u)) {
       res.statusCode = 204
@@ -89,7 +97,6 @@ function factory (config) {
           await fp.rename(path.join(dir, oldfilepath), path.join(dir, filepath))
         }
         const core = gitdir + '-' + String(Math.random()).slice(2, 8)
-        console.log('core', core)
         gitdir = path.join(__dirname, gitdir)
 
         // send HTTP response headers
@@ -98,7 +105,6 @@ function factory (config) {
 
         // index packfile
         res.write(await serveReceivePack({ type: 'print', message: 'Indexing packfile...' }))
-        console.log('Indexing packfile...')
         await tick()
         let currentPhase = null
         const listener = async ({ phase, loaded, total, lengthComputable }) => {
@@ -132,10 +138,18 @@ function factory (config) {
         await fp.rmdir(path.join(dir))
 
         // Run pre-receive-hook
-        res.write(await serveReceivePack({ type: 'print', message: '\nRunning pre-receive-hook\n' }))
+        res.write(await serveReceivePack({ type: 'print', message: '\nRunning pre-receive hook\n' }))
         await tick()
-        const script = fs.readFileSync('./pre-receive-hook.js', 'utf8')
-        await sandbox({ core, dir, gitdir, res, oids, script })
+        let script
+        try {
+          const oid = await resolveRef({ gitdir, ref: 'HEAD' })
+          const { object } = await readObject({ gitdir, oid, filepath: '.hooks/pre-receive.js', encoding: 'utf8' })
+          script = object
+        } catch (e) {
+          console.log(e)
+          script = fs.readFileSync('./pre-receive-hook.js', 'utf8')
+        }
+        await sandbox({ name: 'pre-receive.js', core, dir, gitdir, res, oids, updates, script })
 
         // refs
         for (const update of updates) {
@@ -148,7 +162,7 @@ function factory (config) {
         if (e.message === 'Client is done') {
           res.statusCode = 200
         } else {
-          res.write(await serveReceivePack({ type: 'error', message: e.message }))
+          res.write(await serveReceivePack({ type: 'error', message: `${e.message}\n${e.stack}` }))
         }
       } finally {
         // fin
@@ -156,7 +170,8 @@ function factory (config) {
         res.end('')
       }
     }
-    log(req, res)
+
+    logOutgoing(req, res)
   }
 }
 

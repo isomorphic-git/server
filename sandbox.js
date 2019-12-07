@@ -9,7 +9,7 @@ const { lookup, demote } = require('./lookup.js')
 
 const curry = ({ core, dir, gitdir }) => fn => argObject => fn({ ...argObject, core, dir, gitdir })
 
-const sandbox = ({ core, dir, gitdir, res, script, oids }) => {
+const sandbox = ({ name, core, dir, gitdir, res, oids, updates, script }) => {
   let ee = new EventEmitter()
   plugincore = git.cores.create(core)
   plugincore.set('emitter', ee)
@@ -46,7 +46,7 @@ const sandbox = ({ core, dir, gitdir, res, script, oids }) => {
       log: async (...args) => {
         res.write(await git.serveReceivePack({ type: 'print', message: args.join() }))
       },
-      fatal: (...args) => {
+      error: (...args) => {
         reject(new Error(args.join()))
       }
     }
@@ -55,15 +55,16 @@ const sandbox = ({ core, dir, gitdir, res, script, oids }) => {
       eval: false,
       wasm: false,
       sandbox: {
+        updates,
+        oids,
         git: $git,
         pgp: { lookup, demote },
-        done: resolve,
+        done: (err) => err ? reject(err) : resolve(),
         console: $console,
-        oids
       }
     });
     try {
-      script = new VMScript(script).compile();
+      script = new VMScript(script, name).compile();
     } catch (err) {
       reject(err);
     }

@@ -1,2 +1,5 @@
 0000000000000000000000000000000000000000 71c666705d861b556d73f2badddaca0cfcf5e930 William Hilton <wmhilton@gmail.com> 1574741587 -0500	commit (initial): Initial commit
 0000000000000000000000000000000000000000 b1f9a9a2689e95d8aaf9d2ed5513fe78f4c53901 William Hilton <wmhilton@gmail.com> 1575084779 -0500	commit (initial): Initial commit
+b1f9a9a2689e95d8aaf9d2ed5513fe78f4c53901 d76ea2f1501e44ac5c29a091e17903b6a33fc57f William Hilton <wmhilton@gmail.com> 1575685262 -0500	commit: add pre-receive hook
+d76ea2f1501e44ac5c29a091e17903b6a33fc57f ee27a42768a70831127fca08ccc9df7b13f0f81e William Hilton <wmhilton@gmail.com> 1575686304 -0500	commit (amend): add pre-receive hook
+ee27a42768a70831127fca08ccc9df7b13f0f81e 59eabecab1988d343a2cc8c054a56d5e6cb3bd89 William Hilton <wmhilton@gmail.com> 1575686347 -0500	commit (amend): add pre-receive hook
