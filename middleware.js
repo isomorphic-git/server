@@ -42,6 +42,7 @@ function logOutgoing(req, res) {
 }
 
 function factory (config) {
+  fp.mkdir(path.join(__dirname, 'quarantine'), { recursive: true })
   return async function middleware (req, res, next) {
     const u = url.parse(req.url, true)
     if (!next) next = () => void(0)
@@ -133,6 +134,7 @@ function factory (config) {
         await tick()
 
         // Move packfile and index into repo
+        await fp.mkdir(path.join(gitdir, 'objects', 'pack'), { recursive: true })
         await fp.rename(path.join(dir, filepath), path.join(gitdir, 'objects', 'pack', filepath))
         await fp.rename(path.join(dir, filepath.replace(/\.pack$/, '.idx')), path.join(gitdir, 'objects', 'pack', filepath.replace(/\.pack$/, '.idx')))
         await fp.rmdir(path.join(dir))
